@@ -1,12 +1,10 @@
 package com.legacy.realworld.servlet;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
-import com.legacy.realworld.model.Article;
+import com.legacy.realworld.repository.ArticleRepository;
+import com.legacy.realworld.service.ArticleService;
 import com.legacy.realworld.util.DatabaseUtil;
-import com.legacy.realworld.util.JsonUtil;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
@@ -16,40 +14,27 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Date;
-import java.util.UUID;
 
 /**
- * Fat servlet that handles all article-related operations.
- * 
- * This servlet contains business logic, SQL queries, authentication checks,
- * and JSON serialization all in one class. This is the opposite of the
- * modern version's clean separation (Controller -> Service -> Repository).
- * 
- * TODO: This class is over 300 lines and does everything. Should be split into
- * separate service and repository layers.
- * 
+ * Servlet that handles all article-related HTTP operations.
+ * Business logic is delegated to ArticleService; data access to ArticleRepository.
+ *
  * @author legacy-team
  * @since 1.0
  */
 public class ArticleServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
-    private Gson gson = new Gson();
+    private ArticleService articleService;
 
     @Override
     public void init() throws ServletException {
         super.init();
-        // TODO: This is our "poor man's DI" - should use a real framework
-        // ServiceLocator.register("articleServlet", this);
+        this.articleService = new ArticleService(new ArticleRepository());
 
         // Initialize database schema on first startup
         // TODO: This should be in a ServletContextListener, not in a servlet init()
-        // The modern version uses Flyway migrations triggered by Spring Boot auto-config
         try {
             DatabaseUtil.initializeDatabase();
         } catch (Exception e) {
@@ -64,17 +49,16 @@ public class ArticleServlet extends HttpServlet {
      * Check if the request is actually for the /comments sub-resource and forward
      * to CommentServlet if so. This is needed because the Servlet spec doesn't
      * support mid-path wildcards like /api/articles/{slug}/comments/{id}.
-     * 
+     *
      * TODO: This forwarding hack is fragile. A front-controller pattern or
      * a framework like Spring MVC would handle this cleanly.
-     * 
+     *
      * @return true if the request was forwarded (caller should return immediately)
      */
     private boolean forwardIfCommentRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String pathInfo = request.getPathInfo();
         if (pathInfo != null && pathInfo.matches("/[^/]+/comments(/.*)?$")) {
-            // Extract slug and rebuild as /api/comments/{slug}[/{commentId}]
             String slug = pathInfo.substring(1);
             if (slug.contains("/")) {
                 slug = slug.substring(0, slug.indexOf("/"));
@@ -90,15 +74,11 @@ public class ArticleServlet extends HttpServlet {
 
     /**
      * POST /api/articles - Create a new article
-     * 
-     * TODO: No input validation at all. Title could be null or empty.
-     * The modern version uses @Valid @RequestBody with Bean Validation.
      */
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        // Forward comment requests to CommentServlet
         if (forwardIfCommentRequest(request, response)) return;
 
         response.setContentType("application/json");
@@ -107,11 +87,7 @@ public class ArticleServlet extends HttpServlet {
 
         String userId = (String) request.getAttribute("userId");
 
-        Connection conn = null;
-        PreparedStatement stmt = null;
-
         try {
-            // Manual JSON parsing
             BufferedReader reader = request.getReader();
             StringBuilder sb = new StringBuilder();
             String line;
@@ -125,48 +101,17 @@ public class ArticleServlet extends HttpServlet {
             String title = articleJson.get("title").getAsString();
             String description = articleJson.get("description").getAsString();
             String body = articleJson.get("body").getAsString();
-            String slug = Article.toSlug(title);
-            String id = UUID.randomUUID().toString();
-            Date now = new Date();
 
-            // Inline SQL - no ORM, no mapper, just raw JDBC
-            // TODO: SQL injection risk? PreparedStatement helps but the query is still inline
-            conn = DatabaseUtil.getConnection();
-            stmt = conn.prepareStatement(
-                "INSERT INTO articles (id, slug, title, description, body, user_id, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-            );
-            stmt.setString(1, id);
-            stmt.setString(2, slug);
-            stmt.setString(3, title);
-            stmt.setString(4, description);
-            stmt.setString(5, body);
-            stmt.setString(6, userId);
-            stmt.setLong(7, now.getTime());
-            stmt.setLong(8, now.getTime());
-            stmt.executeUpdate();
+            JsonObject article = articleService.createArticle(title, description, body, userId);
 
-            // Re-fetch the created article with author info to match GET response shape
-            // TODO: This is an extra round-trip. Could build the response from the data we already have.
-            stmt.close();
-            stmt = conn.prepareStatement(
-                "SELECT a.*, u.username, u.bio, u.image " +
-                "FROM articles a JOIN users u ON a.user_id = u.id " +
-                "WHERE a.id = ?"
-            );
-            stmt.setString(1, id);
-            ResultSet rs = stmt.executeQuery();
-
-            if (rs.next()) {
+            if (article != null) {
                 JsonObject responseJson = new JsonObject();
-                responseJson.add("article", mapArticleFromResultSet(rs));
+                responseJson.add("article", article);
                 response.setStatus(HttpServletResponse.SC_CREATED);
                 out.print(responseJson.toString());
             }
-            rs.close();
 
         } catch (SQLException e) {
-            // TODO: This exposes internal error details to the client
             e.printStackTrace();
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             JsonObject error = new JsonObject();
@@ -178,19 +123,6 @@ public class ArticleServlet extends HttpServlet {
             JsonObject error = new JsonObject();
             error.addProperty("error", "Internal error: " + e.getMessage());
             out.print(error.toString());
-        } finally {
-            // Manual resource cleanup - no try-with-resources
-            // TODO: Should use try-with-resources (Java 7+)
-            try {
-                if (stmt != null) stmt.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-            try {
-                if (conn != null) conn.close();
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
         }
 
         out.flush();
@@ -199,52 +131,32 @@ public class ArticleServlet extends HttpServlet {
     /**
      * GET /api/articles - List articles
      * GET /api/articles/{slug} - Get single article
-     * 
-     * TODO: No pagination limits - could return thousands of rows.
-     * The modern version uses Page objects with offset/limit.
      */
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        // Forward comment requests to CommentServlet
         if (forwardIfCommentRequest(request, response)) return;
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        Connection conn = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
         try {
-            conn = DatabaseUtil.getConnection();
-
-            // Parse slug from URL path manually
-            // TODO: This URL parsing is fragile and error-prone
             String pathInfo = request.getPathInfo();
 
             if (pathInfo != null && pathInfo.length() > 1) {
                 // GET /api/articles/{slug} - single article
-                String slug = pathInfo.substring(1);  // Remove leading "/"
-
-                // Remove trailing path components (e.g., /comments)
+                String slug = pathInfo.substring(1);
                 if (slug.contains("/")) {
                     slug = slug.substring(0, slug.indexOf("/"));
                 }
 
-                stmt = conn.prepareStatement(
-                    "SELECT a.*, u.username, u.bio, u.image " +
-                    "FROM articles a JOIN users u ON a.user_id = u.id " +
-                    "WHERE a.slug = ?"
-                );
-                stmt.setString(1, slug);
-                rs = stmt.executeQuery();
+                JsonObject article = articleService.getArticle(slug);
 
-                if (rs.next()) {
+                if (article != null) {
                     JsonObject responseJson = new JsonObject();
-                    responseJson.add("article", mapArticleFromResultSet(rs));
+                    responseJson.add("article", article);
                     out.print(responseJson.toString());
                 } else {
                     response.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -254,45 +166,13 @@ public class ArticleServlet extends HttpServlet {
                 }
             } else {
                 // GET /api/articles - list all articles
-                // TODO: No pagination! This will be a problem with lots of articles.
                 String offsetParam = request.getParameter("offset");
                 String limitParam = request.getParameter("limit");
                 int offset = (offsetParam != null) ? Integer.parseInt(offsetParam) : 0;
                 int limit = (limitParam != null) ? Integer.parseInt(limitParam) : 20;
 
-                // TODO: No parameterized author/tag/favorited filtering like the modern version
-                stmt = conn.prepareStatement(
-                    "SELECT a.*, u.username, u.bio, u.image " +
-                    "FROM articles a JOIN users u ON a.user_id = u.id " +
-                    "ORDER BY a.created_at DESC " +
-                    "LIMIT ? OFFSET ?"
-                );
-                stmt.setInt(1, limit);
-                stmt.setInt(2, offset);
-                rs = stmt.executeQuery();
-
-                // Manual JSON array building
-                JsonArray articlesArray = new JsonArray();
-                while (rs.next()) {
-                    articlesArray.add(mapArticleFromResultSet(rs));
-                }
-                rs.close();
-                stmt.close();
-
-                // Separate COUNT query for total count (not just current page)
-                // TODO: This is a second round-trip. Could use a window function or
-                // a single query with SQL_CALC_FOUND_ROWS, but SQLite doesn't support that.
-                stmt = conn.prepareStatement("SELECT COUNT(*) FROM articles");
-                rs = stmt.executeQuery();
-                int totalCount = 0;
-                if (rs.next()) {
-                    totalCount = rs.getInt(1);
-                }
-
-                JsonObject responseJson = new JsonObject();
-                responseJson.add("articles", articlesArray);
-                responseJson.addProperty("articlesCount", totalCount);
-                out.print(responseJson.toString());
+                JsonObject result = articleService.listArticles(limit, offset);
+                out.print(result.toString());
             }
 
         } catch (SQLException e) {
@@ -307,11 +187,6 @@ public class ArticleServlet extends HttpServlet {
             JsonObject error = new JsonObject();
             error.addProperty("error", "Internal error: " + e.getMessage());
             out.print(error.toString());
-        } finally {
-            // Manual cleanup - same pattern repeated everywhere
-            try { if (rs != null) rs.close(); } catch (SQLException e) { e.printStackTrace(); }
-            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
-            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
 
         out.flush();
@@ -319,12 +194,9 @@ public class ArticleServlet extends HttpServlet {
 
     /**
      * PUT /api/articles/{slug} - Update an article
-     * 
-     * TODO: No ownership check - any authenticated user can update any article!
-     * The modern version uses AuthorizationService.canWriteArticle().
      */
     @Override
-    protected void doPut(HttpServletRequest request, HttpServletResponse response) 
+    protected void doPut(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
         response.setContentType("application/json");
@@ -332,9 +204,6 @@ public class ArticleServlet extends HttpServlet {
         PrintWriter out = response.getWriter();
 
         String userId = (String) request.getAttribute("userId");
-
-        Connection conn = null;
-        PreparedStatement stmt = null;
 
         try {
             String pathInfo = request.getPathInfo();
@@ -347,7 +216,6 @@ public class ArticleServlet extends HttpServlet {
             }
             String slug = pathInfo.substring(1);
 
-            // Parse request body
             BufferedReader reader = request.getReader();
             StringBuilder sb = new StringBuilder();
             String line;
@@ -358,71 +226,16 @@ public class ArticleServlet extends HttpServlet {
             JsonObject json = JsonParser.parseString(sb.toString()).getAsJsonObject();
             JsonObject articleJson = json.getAsJsonObject("article");
 
-            // Build UPDATE query dynamically - this is messy
-            // TODO: Should use a proper ORM or at least a query builder
-            StringBuilder sqlBuilder = new StringBuilder("UPDATE articles SET updated_at = ?");
-            int paramIndex = 2;
+            String newTitle = articleJson.has("title") ? articleJson.get("title").getAsString() : null;
+            String newDescription = articleJson.has("description") ? articleJson.get("description").getAsString() : null;
+            String newBody = articleJson.has("body") ? articleJson.get("body").getAsString() : null;
 
-            String newTitle = null;
-            String newDescription = null;
-            String newBody = null;
+            JsonObject article = articleService.updateArticle(slug, userId, newTitle, newDescription, newBody);
 
-            if (articleJson.has("title")) {
-                newTitle = articleJson.get("title").getAsString();
-                sqlBuilder.append(", title = ?, slug = ?");
-            }
-            if (articleJson.has("description")) {
-                newDescription = articleJson.get("description").getAsString();
-                sqlBuilder.append(", description = ?");
-            }
-            if (articleJson.has("body")) {
-                newBody = articleJson.get("body").getAsString();
-                sqlBuilder.append(", body = ?");
-            }
-
-            sqlBuilder.append(" WHERE slug = ? AND user_id = ?");
-
-            conn = DatabaseUtil.getConnection();
-            stmt = conn.prepareStatement(sqlBuilder.toString());
-
-            Date now = new Date();
-            stmt.setLong(1, now.getTime());
-
-            if (newTitle != null) {
-                stmt.setString(paramIndex++, newTitle);
-                stmt.setString(paramIndex++, Article.toSlug(newTitle));
-            }
-            if (newDescription != null) {
-                stmt.setString(paramIndex++, newDescription);
-            }
-            if (newBody != null) {
-                stmt.setString(paramIndex++, newBody);
-            }
-
-            stmt.setString(paramIndex++, slug);
-            stmt.setString(paramIndex++, userId);
-
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated > 0) {
-                // Re-fetch the updated article
-                // TODO: This is an extra database round-trip. Could return the data more efficiently.
-                stmt.close();
-                String newSlug = (newTitle != null) ? Article.toSlug(newTitle) : slug;
-                stmt = conn.prepareStatement(
-                    "SELECT a.*, u.username, u.bio, u.image " +
-                    "FROM articles a JOIN users u ON a.user_id = u.id " +
-                    "WHERE a.slug = ?"
-                );
-                stmt.setString(1, newSlug);
-                ResultSet rs = stmt.executeQuery();
-
-                if (rs.next()) {
-                    JsonObject responseJson = new JsonObject();
-                    responseJson.add("article", mapArticleFromResultSet(rs));
-                    out.print(responseJson.toString());
-                }
-                rs.close();
+            if (article != null) {
+                JsonObject responseJson = new JsonObject();
+                responseJson.add("article", article);
+                out.print(responseJson.toString());
             } else {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 JsonObject error = new JsonObject();
@@ -442,9 +255,6 @@ public class ArticleServlet extends HttpServlet {
             JsonObject error = new JsonObject();
             error.addProperty("error", "Internal error: " + e.getMessage());
             out.print(error.toString());
-        } finally {
-            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
-            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
 
         out.flush();
@@ -454,10 +264,9 @@ public class ArticleServlet extends HttpServlet {
      * DELETE /api/articles/{slug} - Delete an article
      */
     @Override
-    protected void doDelete(HttpServletRequest request, HttpServletResponse response) 
+    protected void doDelete(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        // Forward comment requests to CommentServlet
         if (forwardIfCommentRequest(request, response)) return;
 
         response.setContentType("application/json");
@@ -465,9 +274,6 @@ public class ArticleServlet extends HttpServlet {
         PrintWriter out = response.getWriter();
 
         String userId = (String) request.getAttribute("userId");
-
-        Connection conn = null;
-        PreparedStatement stmt = null;
 
         try {
             String pathInfo = request.getPathInfo();
@@ -480,44 +286,15 @@ public class ArticleServlet extends HttpServlet {
             }
             String slug = pathInfo.substring(1);
 
-            conn = DatabaseUtil.getConnection();
+            boolean deleted = articleService.deleteArticle(slug, userId);
 
-            // Use a transaction so comment + article deletion is atomic
-            // TODO: Should use ON DELETE CASCADE in the schema instead
-            conn.setAutoCommit(false);
-
-            try {
-                // First check if article exists and is owned by user
-                stmt = conn.prepareStatement(
-                    "DELETE FROM articles WHERE slug = ? AND user_id = ?"
-                );
-                stmt.setString(1, slug);
-                stmt.setString(2, userId);
-
-                int rowsDeleted = stmt.executeUpdate();
-
-                if (rowsDeleted > 0) {
-                    // Only delete comments if article was actually deleted
-                    stmt.close();
-                    stmt = conn.prepareStatement(
-                        "DELETE FROM comments WHERE article_id NOT IN (SELECT id FROM articles)"
-                    );
-                    stmt.executeUpdate();
-
-                    conn.commit();
-                    response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-                } else {
-                    conn.rollback();
-                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    JsonObject error = new JsonObject();
-                    error.addProperty("error", "Article not found or not authorized");
-                    out.print(error.toString());
-                }
-            } catch (SQLException innerEx) {
-                conn.rollback();
-                throw innerEx;
-            } finally {
-                conn.setAutoCommit(true);
+            if (deleted) {
+                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+            } else {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                JsonObject error = new JsonObject();
+                error.addProperty("error", "Article not found or not authorized");
+                out.print(error.toString());
             }
 
         } catch (SQLException e) {
@@ -526,45 +303,8 @@ public class ArticleServlet extends HttpServlet {
             JsonObject error = new JsonObject();
             error.addProperty("error", "Database error: " + e.getMessage());
             out.print(error.toString());
-        } finally {
-            try { if (stmt != null) stmt.close(); } catch (SQLException e) { e.printStackTrace(); }
-            try { if (conn != null) conn.close(); } catch (SQLException e) { e.printStackTrace(); }
         }
 
         out.flush();
-    }
-
-    /**
-     * Map a ResultSet row to a JSON object.
-     * TODO: This manual mapping is tedious and error-prone.
-     * The modern version uses MyBatis mappers or JPA entity mapping.
-     */
-    private JsonObject mapArticleFromResultSet(ResultSet rs) throws SQLException {
-        JsonObject article = new JsonObject();
-        article.addProperty("id", rs.getString("id"));
-        article.addProperty("slug", rs.getString("slug"));
-        article.addProperty("title", rs.getString("title"));
-        article.addProperty("description", rs.getString("description"));
-        article.addProperty("body", rs.getString("body"));
-
-        // TODO: This date formatting is not thread-safe
-        long createdAtMs = rs.getLong("created_at");
-        long updatedAtMs = rs.getLong("updated_at");
-        article.addProperty("createdAt", JsonUtil.formatDate(new Date(createdAtMs)));
-        article.addProperty("updatedAt", JsonUtil.formatDate(new Date(updatedAtMs)));
-
-        // Inline author object construction
-        JsonObject author = new JsonObject();
-        author.addProperty("username", rs.getString("username"));
-        author.addProperty("bio", rs.getString("bio"));
-        author.addProperty("image", rs.getString("image"));
-        author.addProperty("following", false);  // TODO: Not implemented
-        article.add("author", author);
-
-        article.addProperty("favorited", false);    // TODO: Not implemented
-        article.addProperty("favoritesCount", 0);   // TODO: Not implemented
-        article.add("tagList", new JsonArray());     // TODO: Not implemented
-
-        return article;
     }
 }
