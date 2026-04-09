@@ -12,6 +12,13 @@
     </description>
 
     <!-- ============================================================ -->
+    <!-- Listeners                                                      -->
+    <!-- ============================================================ -->
+    <listener>
+        <listener-class>com.legacy.realworld.util.AppContextListener</listener-class>
+    </listener>
+
+    <!-- ============================================================ -->
     <!-- Servlet Declarations                                          -->
     <!-- TODO: Consider using annotation-based configuration (@WebServlet) -->
     <!-- But we've "always done it this way" so let's keep web.xml     -->
