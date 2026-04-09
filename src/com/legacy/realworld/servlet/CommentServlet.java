@@ -29,8 +29,14 @@ import java.util.UUID;
  * Same problems as ArticleServlet: inline SQL, manual auth checks,
  * manual JSON construction, no separation of concerns.
  * 
- * URL pattern: /api/articles/{slug}/comments
- * URL pattern: /api/articles/{slug}/comments/{id}
+ * Mapped to /api/comments/* because the Servlet spec doesn't support
+ * mid-path wildcards like /api/articles/*/comments/*.
+ * Actual URL paths:
+ *   /api/comments/{slug}       - POST (create), GET (list)
+ *   /api/comments/{slug}/{id}  - DELETE
+ * 
+ * The ArticleServlet at /api/articles/* forwards comment requests here
+ * via RequestDispatcher when it detects /comments/ in the path.
  * 
  * TODO: The URL parsing is especially painful here because we need to
  * extract both the article slug AND the comment ID from the path.
@@ -330,21 +336,32 @@ public class CommentServlet extends HttpServlet {
 
     /**
      * Extract article slug from the request path.
-     * Expected path patterns:
-     *   /api/articles/{slug}/comments
-     *   /api/articles/{slug}/comments/{id}
      * 
-     * The servlet is mapped to /api/articles/*, so pathInfo starts after that.
-     * We need to look at the full request URI.
+     * Servlet is mapped to /api/comments/*, so pathInfo is:
+     *   /{slug}       for POST/GET
+     *   /{slug}/{id}  for DELETE
+     * 
+     * But requests may also arrive via RequestDispatcher forward from
+     * ArticleServlet, in which case the original URI has the
+     * /api/articles/{slug}/comments form. We check both.
      * 
      * TODO: This is incredibly brittle. Any change to URL structure breaks this.
      * The modern version uses @PathVariable("slug") which is declarative and robust.
      */
     private String extractSlugFromPath(HttpServletRequest request) {
+        // First try: direct pathInfo from /api/comments/{slug}[/{id}]
+        String pathInfo = request.getPathInfo();
+        if (pathInfo != null && pathInfo.length() > 1) {
+            String path = pathInfo.substring(1); // Remove leading "/"
+            if (path.contains("/")) {
+                return path.substring(0, path.indexOf("/"));
+            }
+            return path;
+        }
+
+        // Fallback: parse from full URI (forwarded from ArticleServlet)
         String uri = request.getRequestURI();
-        // Expected: /api/articles/{slug}/comments or /api/articles/{slug}/comments/{id}
         String[] parts = uri.split("/");
-        // parts: ["", "api", "articles", "{slug}", "comments", ...]
         for (int i = 0; i < parts.length; i++) {
             if ("articles".equals(parts[i]) && i + 1 < parts.length) {
                 return parts[i + 1];
@@ -355,14 +372,25 @@ public class CommentServlet extends HttpServlet {
 
     /**
      * Extract comment ID from the request path.
-     * Expected: /api/articles/{slug}/comments/{id}
+     * 
+     * pathInfo is /{slug}/{id} from /api/comments/{slug}/{id}
+     * Or from forwarded URI: /api/articles/{slug}/comments/{id}
      * 
      * TODO: Same brittleness as extractSlugFromPath
      */
     private String extractCommentIdFromPath(HttpServletRequest request) {
+        // First try: pathInfo from /api/comments/{slug}/{id}
+        String pathInfo = request.getPathInfo();
+        if (pathInfo != null && pathInfo.length() > 1) {
+            String path = pathInfo.substring(1);
+            if (path.contains("/")) {
+                return path.substring(path.indexOf("/") + 1);
+            }
+        }
+
+        // Fallback: parse from full URI
         String uri = request.getRequestURI();
         String[] parts = uri.split("/");
-        // parts: ["", "api", "articles", "{slug}", "comments", "{id}"]
         for (int i = 0; i < parts.length; i++) {
             if ("comments".equals(parts[i]) && i + 1 < parts.length) {
                 return parts[i + 1];

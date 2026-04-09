@@ -9,6 +9,7 @@ import com.legacy.realworld.util.AuthUtil;
 import com.legacy.realworld.util.DatabaseUtil;
 import com.legacy.realworld.util.JsonUtil;
 
+import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -50,6 +51,34 @@ public class ArticleServlet extends HttpServlet {
     }
 
     /**
+     * Check if the request is actually for the /comments sub-resource and forward
+     * to CommentServlet if so. This is needed because the Servlet spec doesn't
+     * support mid-path wildcards like /api/articles/*/comments/*.
+     * 
+     * TODO: This forwarding hack is fragile. A front-controller pattern or
+     * a framework like Spring MVC would handle this cleanly.
+     * 
+     * @return true if the request was forwarded (caller should return immediately)
+     */
+    private boolean forwardIfCommentRequest(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        String pathInfo = request.getPathInfo();
+        if (pathInfo != null && pathInfo.contains("/comments")) {
+            // Extract slug and rebuild as /api/comments/{slug}[/{commentId}]
+            String slug = pathInfo.substring(1);
+            if (slug.contains("/")) {
+                slug = slug.substring(0, slug.indexOf("/"));
+            }
+            String remainder = pathInfo.substring(pathInfo.indexOf("/comments") + "/comments".length());
+            String forwardPath = "/api/comments/" + slug + remainder;
+            RequestDispatcher dispatcher = request.getRequestDispatcher(forwardPath);
+            dispatcher.forward(request, response);
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * POST /api/articles - Create a new article
      * 
      * TODO: No input validation at all. Title could be null or empty.
@@ -58,6 +87,9 @@ public class ArticleServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
+
+        // Forward comment requests to CommentServlet
+        if (forwardIfCommentRequest(request, response)) return;
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
@@ -111,13 +143,24 @@ public class ArticleServlet extends HttpServlet {
             stmt.setLong(8, now.getTime());
             stmt.executeUpdate();
 
-            // Manual JSON response construction
-            Article article = new Article(id, slug, title, description, body, userId, now, now);
-            JsonObject responseJson = new JsonObject();
-            responseJson.add("article", JsonUtil.toJsonObject(article));
+            // Re-fetch the created article with author info to match GET response shape
+            // TODO: This is an extra round-trip. Could build the response from the data we already have.
+            stmt.close();
+            stmt = conn.prepareStatement(
+                "SELECT a.*, u.username, u.bio, u.image " +
+                "FROM articles a JOIN users u ON a.user_id = u.id " +
+                "WHERE a.id = ?"
+            );
+            stmt.setString(1, id);
+            ResultSet rs = stmt.executeQuery();
 
-            response.setStatus(HttpServletResponse.SC_OK);
-            out.print(responseJson.toString());
+            if (rs.next()) {
+                JsonObject responseJson = new JsonObject();
+                responseJson.add("article", mapArticleFromResultSet(rs));
+                response.setStatus(HttpServletResponse.SC_OK);
+                out.print(responseJson.toString());
+            }
+            rs.close();
 
         } catch (SQLException e) {
             // TODO: This exposes internal error details to the client
@@ -160,6 +203,9 @@ public class ArticleServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
+
+        // Forward comment requests to CommentServlet
+        if (forwardIfCommentRequest(request, response)) return;
 
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
@@ -224,15 +270,25 @@ public class ArticleServlet extends HttpServlet {
 
                 // Manual JSON array building
                 JsonArray articlesArray = new JsonArray();
-                int count = 0;
                 while (rs.next()) {
                     articlesArray.add(mapArticleFromResultSet(rs));
-                    count++;
+                }
+                rs.close();
+                stmt.close();
+
+                // Separate COUNT query for total count (not just current page)
+                // TODO: This is a second round-trip. Could use a window function or
+                // a single query with SQL_CALC_FOUND_ROWS, but SQLite doesn't support that.
+                stmt = conn.prepareStatement("SELECT COUNT(*) FROM articles");
+                rs = stmt.executeQuery();
+                int totalCount = 0;
+                if (rs.next()) {
+                    totalCount = rs.getInt(1);
                 }
 
                 JsonObject responseJson = new JsonObject();
                 responseJson.add("articles", articlesArray);
-                responseJson.addProperty("articlesCount", count);
+                responseJson.addProperty("articlesCount", totalCount);
                 out.print(responseJson.toString());
             }
 
@@ -404,6 +460,9 @@ public class ArticleServlet extends HttpServlet {
     protected void doDelete(HttpServletRequest request, HttpServletResponse response) 
             throws ServletException, IOException {
 
+        // Forward comment requests to CommentServlet
+        if (forwardIfCommentRequest(request, response)) return;
+
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
@@ -432,33 +491,42 @@ public class ArticleServlet extends HttpServlet {
 
             conn = DatabaseUtil.getConnection();
 
-            // Delete comments first (no cascade delete configured)
-            // TODO: Should use ON DELETE CASCADE in the schema
-            stmt = conn.prepareStatement(
-                "DELETE FROM comments WHERE article_id IN " +
-                "(SELECT id FROM articles WHERE slug = ? AND user_id = ?)"
-            );
-            stmt.setString(1, slug);
-            stmt.setString(2, userId);
-            stmt.executeUpdate();
-            stmt.close();
+            // Use a transaction so comment + article deletion is atomic
+            // TODO: Should use ON DELETE CASCADE in the schema instead
+            conn.setAutoCommit(false);
 
-            // Now delete the article
-            stmt = conn.prepareStatement(
-                "DELETE FROM articles WHERE slug = ? AND user_id = ?"
-            );
-            stmt.setString(1, slug);
-            stmt.setString(2, userId);
+            try {
+                // First check if article exists and is owned by user
+                stmt = conn.prepareStatement(
+                    "DELETE FROM articles WHERE slug = ? AND user_id = ?"
+                );
+                stmt.setString(1, slug);
+                stmt.setString(2, userId);
 
-            int rowsDeleted = stmt.executeUpdate();
+                int rowsDeleted = stmt.executeUpdate();
 
-            if (rowsDeleted > 0) {
-                response.setStatus(HttpServletResponse.SC_NO_CONTENT);
-            } else {
-                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                JsonObject error = new JsonObject();
-                error.addProperty("error", "Article not found or not authorized");
-                out.print(error.toString());
+                if (rowsDeleted > 0) {
+                    // Only delete comments if article was actually deleted
+                    stmt.close();
+                    stmt = conn.prepareStatement(
+                        "DELETE FROM comments WHERE article_id NOT IN (SELECT id FROM articles)"
+                    );
+                    stmt.executeUpdate();
+
+                    conn.commit();
+                    response.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                } else {
+                    conn.rollback();
+                    response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    JsonObject error = new JsonObject();
+                    error.addProperty("error", "Article not found or not authorized");
+                    out.print(error.toString());
+                }
+            } catch (SQLException innerEx) {
+                conn.rollback();
+                throw innerEx;
+            } finally {
+                conn.setAutoCommit(true);
             }
 
         } catch (SQLException e) {

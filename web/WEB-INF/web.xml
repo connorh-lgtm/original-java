@@ -40,6 +40,14 @@
     </servlet-mapping>
 
     <!-- Comment Servlet -->
+    <!-- NOTE: Comments are accessed via /api/articles/{slug}/comments but the
+         Servlet spec only supports wildcards at the end of a path prefix.
+         So CommentServlet is mapped to /api/comments/* and we use the
+         article slug as a path component: /api/comments/{slug} and /api/comments/{slug}/{id}
+         The ArticleServlet at /api/articles/* handles forwarding requests that
+         contain /comments/ in the path to this servlet via RequestDispatcher. -->
+    <!-- TODO: This two-servlet routing hack is fragile. A front-controller
+         pattern or a framework like Spring MVC would handle this cleanly. -->
     <servlet>
         <servlet-name>CommentServlet</servlet-name>
         <servlet-class>com.legacy.realworld.servlet.CommentServlet</servlet-class>
@@ -47,7 +55,7 @@
     </servlet>
     <servlet-mapping>
         <servlet-name>CommentServlet</servlet-name>
-        <url-pattern>/api/articles/*/comments/*</url-pattern>
+        <url-pattern>/api/comments/*</url-pattern>
     </servlet-mapping>
 
     <!-- ============================================================ -->
