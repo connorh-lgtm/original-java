@@ -47,6 +47,17 @@ public class ArticleServlet extends HttpServlet {
         super.init();
         // TODO: This is our "poor man's DI" - should use a real framework
         // ServiceLocator.register("articleServlet", this);
+
+        // Initialize database schema on first startup
+        // TODO: This should be in a ServletContextListener, not in a servlet init()
+        // The modern version uses Flyway migrations triggered by Spring Boot auto-config
+        try {
+            DatabaseUtil.initializeDatabase();
+        } catch (Exception e) {
+            System.err.println("WARNING: Database initialization failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+
         System.out.println("ArticleServlet initialized");
     }
 
@@ -157,7 +168,7 @@ public class ArticleServlet extends HttpServlet {
             if (rs.next()) {
                 JsonObject responseJson = new JsonObject();
                 responseJson.add("article", mapArticleFromResultSet(rs));
-                response.setStatus(HttpServletResponse.SC_OK);
+                response.setStatus(HttpServletResponse.SC_CREATED);
                 out.print(responseJson.toString());
             }
             rs.close();
