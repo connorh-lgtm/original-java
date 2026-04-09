@@ -7,6 +7,7 @@ import com.legacy.realworld.model.User;
 import com.legacy.realworld.util.AuthUtil;
 import com.legacy.realworld.util.DatabaseUtil;
 import com.legacy.realworld.util.JsonUtil;
+import com.legacy.realworld.util.PasswordUtil;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -99,8 +100,6 @@ public class UserServlet extends HttpServlet {
     /**
      * Handle user registration.
      * 
-     * TODO: SECURITY - Password is stored as plain text!
-     * The modern version uses PasswordEncoder.encode() to hash passwords.
      * TODO: No email uniqueness check before INSERT (will fail with SQL constraint).
      * TODO: No input validation - email could be "asdf", username could be empty.
      */
@@ -151,9 +150,6 @@ public class UserServlet extends HttpServlet {
             rs.close();
             stmt.close();
 
-            // Insert new user with PLAIN TEXT password
-            // TODO: CRITICAL SECURITY ISSUE - must hash the password!
-            // Modern version: passwordEncoder.encode(password)
             stmt = conn.prepareStatement(
                 "INSERT INTO users (id, email, username, password, bio, image) " +
                 "VALUES (?, ?, ?, ?, ?, ?)"
@@ -161,7 +157,7 @@ public class UserServlet extends HttpServlet {
             stmt.setString(1, id);
             stmt.setString(2, email);
             stmt.setString(3, username);
-            stmt.setString(4, password);  // PLAIN TEXT! No hashing!
+            stmt.setString(4, PasswordUtil.hash(password));
             stmt.setString(5, "");
             stmt.setString(6, "");
             stmt.executeUpdate();
@@ -172,7 +168,7 @@ public class UserServlet extends HttpServlet {
             session.setAttribute("userId", id);
 
             // Build response
-            User user = new User(id, email, username, password, "", "");
+            User user = new User(id, email, username, "", "", "");
             JsonObject responseJson = new JsonObject();
             responseJson.add("user", buildUserResponse(user, session.getId()));
 
@@ -188,11 +184,6 @@ public class UserServlet extends HttpServlet {
     /**
      * Handle user login.
      * 
-     * TODO: SECURITY - Compares passwords with .equals() on plain text.
-     * This is vulnerable to timing attacks.
-     * The modern version uses passwordEncoder.matches() which:
-     *   1. Compares against a hashed value
-     *   2. Uses constant-time comparison
      */
     private void handleLogin(JsonObject userJson, HttpServletRequest request,
                               HttpServletResponse response, PrintWriter out) 
@@ -218,10 +209,7 @@ public class UserServlet extends HttpServlet {
             if (rs.next()) {
                 String storedPassword = rs.getString("password");
 
-                // TODO: SECURITY - Plain text password comparison with .equals()!
-                // This is NOT constant-time and passwords are NOT hashed.
-                // Modern version: passwordEncoder.matches(rawPassword, hashedPassword)
-                if (password.equals(storedPassword)) {
+                if (PasswordUtil.matches(password, storedPassword)) {
                     String userId = rs.getString("id");
 
                     // Create session
@@ -232,7 +220,7 @@ public class UserServlet extends HttpServlet {
                         userId,
                         rs.getString("email"),
                         rs.getString("username"),
-                        storedPassword,  // Including password in object - bad practice
+                        "",
                         rs.getString("bio"),
                         rs.getString("image")
                     );
@@ -241,17 +229,15 @@ public class UserServlet extends HttpServlet {
                     responseJson.add("user", buildUserResponse(user, session.getId()));
                     out.print(responseJson.toString());
                 } else {
-                    // TODO: Should not distinguish between "user not found" and "wrong password"
-                    // This leaks information about which emails are registered
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     JsonObject error = new JsonObject();
-                    error.addProperty("error", "Invalid password");
+                    error.addProperty("error", "Invalid email or password");
                     out.print(error.toString());
                 }
             } else {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 JsonObject error = new JsonObject();
-                error.addProperty("error", "User not found");
+                error.addProperty("error", "Invalid email or password");
                 out.print(error.toString());
             }
 
