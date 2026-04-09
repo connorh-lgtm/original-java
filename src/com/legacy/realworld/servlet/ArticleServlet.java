@@ -74,7 +74,7 @@ public class ArticleServlet extends HttpServlet {
     private boolean forwardIfCommentRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         String pathInfo = request.getPathInfo();
-        if (pathInfo != null && pathInfo.contains("/comments")) {
+        if (pathInfo != null && pathInfo.matches("/[^/]+/comments(/.*)?$")) {
             // Extract slug and rebuild as /api/comments/{slug}[/{commentId}]
             String slug = pathInfo.substring(1);
             if (slug.contains("/")) {
