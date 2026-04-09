@@ -8,7 +8,13 @@ public class PasswordUtil {
     }
 
     public static boolean matches(String plainText, String hashed) {
-        return BCrypt.checkpw(plainText, hashed);
+        try {
+            return BCrypt.checkpw(plainText, hashed);
+        } catch (IllegalArgumentException e) {
+            // Stored password is not a valid BCrypt hash (e.g. legacy plain-text).
+            // Return false so the caller returns 401 instead of 500.
+            return false;
+        }
     }
 
     private PasswordUtil() {
