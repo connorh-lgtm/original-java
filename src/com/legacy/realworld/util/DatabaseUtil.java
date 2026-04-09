@@ -1,9 +1,11 @@
 package com.legacy.realworld.util;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 /**
  * Static database utility class.
@@ -25,47 +27,35 @@ import java.sql.Statement;
  */
 public class DatabaseUtil {
 
-    // TODO: This should not be hardcoded. Should come from JNDI or properties file.
-    private static final String DB_URL = "jdbc:sqlite:realworld.db";
-
-    // Dead code: connection counting was used for debugging a leak, left behind
-    // private static int connectionCount = 0;
-    // private static final int MAX_CONNECTIONS = 50;
-
-    // Static initializer block to load the JDBC driver
-    // TODO: This is the pre-JDBC 4.0 way. Modern drivers auto-register.
+    private static final HikariDataSource dataSource;
     static {
-        try {
-            Class.forName("org.sqlite.JDBC");
-            System.out.println("SQLite JDBC driver loaded successfully");
-        } catch (ClassNotFoundException e) {
-            // TODO: This just prints and continues - the app will fail later
-            // with a confusing "no suitable driver" error
-            System.err.println("ERROR: SQLite JDBC driver not found!");
-            System.err.println("Make sure sqlite-jdbc-3.20.0.jar is in lib/");
-            e.printStackTrace();
-        }
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl("jdbc:sqlite:realworld.db");
+        config.setMaximumPoolSize(10);
+        config.setMinimumIdle(2);
+        config.setConnectionTimeout(30000);
+        dataSource = new HikariDataSource(config);
+        System.out.println("HikariCP connection pool initialized");
     }
 
     /**
-     * Get a new database connection.
+     * Get a database connection from the HikariCP pool.
      * 
-     * TODO: NO CONNECTION POOLING! Every call creates a new connection.
-     * This is extremely inefficient under load. The modern version uses
-     * HikariCP which maintains a pool of reusable connections.
-     * 
-     * TODO: Connection is never returned to a pool - caller must close it.
-     * If they forget, we leak connections until the database locks up.
-     * 
-     * @return a new database connection
+     * @return a pooled database connection
      * @throws SQLException if connection fails
      */
     public static Connection getConnection() throws SQLException {
-        // connectionCount++;
-        // if (connectionCount > MAX_CONNECTIONS) {
-        //     System.err.println("WARNING: Over " + MAX_CONNECTIONS + " connections opened!");
-        // }
-        return DriverManager.getConnection(DB_URL);
+        return dataSource.getConnection();
+    }
+
+    /**
+     * Shut down the HikariCP connection pool.
+     */
+    public static void shutdown() {
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+            System.out.println("HikariCP connection pool shut down");
+        }
     }
 
     /**
