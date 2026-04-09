@@ -135,6 +135,22 @@ public class UserServlet extends HttpServlet {
             rs.close();
             stmt.close();
 
+            // Check if username already exists
+            // TODO: Same race condition as the email check above
+            stmt = conn.prepareStatement("SELECT id FROM users WHERE username = ?");
+            stmt.setString(1, username);
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                response.setStatus(HttpServletResponse.SC_CONFLICT);
+                JsonObject error = new JsonObject();
+                error.addProperty("error", "Username already in use");
+                out.print(error.toString());
+                rs.close();
+                return;
+            }
+            rs.close();
+            stmt.close();
+
             // Insert new user with PLAIN TEXT password
             // TODO: CRITICAL SECURITY ISSUE - must hash the password!
             // Modern version: passwordEncoder.encode(password)
