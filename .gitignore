@@ -1,0 +1,23 @@
+# Build output
+build/
+*.class
+*.war
+
+# Database
+*.db
+
+# IDE files
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# JAR files (downloaded manually into lib/)
+lib/*.jar
+!lib/README.txt

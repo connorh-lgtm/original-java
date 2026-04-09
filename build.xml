@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="legacy-realworld-app" default="war" basedir=".">
+
+    <description>
+        Legacy RealWorld Blog API - Ant Build File
+        Java 8 Servlet-based application with manual dependency management.
+        No Maven. No Gradle. Just Ant and hand-managed JARs.
+    </description>
+
+    <!-- Properties -->
+    <property name="src.dir" value="src"/>
+    <property name="build.dir" value="build"/>
+    <property name="classes.dir" value="${build.dir}/classes"/>
+    <property name="war.dir" value="${build.dir}/war"/>
+    <property name="lib.dir" value="lib"/>
+    <property name="web.dir" value="web"/>
+    <property name="war.file" value="${build.dir}/legacy-realworld.war"/>
+
+    <!-- TODO: Should probably use a dependency manager instead of manual JARs -->
+    <!-- Manual classpath - every JAR must be downloaded and placed in lib/ by hand -->
+    <path id="compile.classpath">
+        <fileset dir="${lib.dir}">
+            <include name="*.jar"/>
+        </fileset>
+    </path>
+
+    <!-- Clean target -->
+    <target name="clean" description="Remove all build artifacts">
+        <delete dir="${build.dir}"/>
+        <!-- Sometimes we leave .class files in src by accident -->
+        <delete>
+            <fileset dir="${src.dir}" includes="**/*.class" erroronmissingdir="false"/>
+        </delete>
+    </target>
+
+    <!-- Compile target -->
+    <target name="compile" description="Compile Java source files">
+        <mkdir dir="${classes.dir}"/>
+        <javac srcdir="${src.dir}"
+               destdir="${classes.dir}"
+               source="1.8"
+               target="1.8"
+               includeantruntime="false"
+               debug="true"
+               encoding="UTF-8">
+            <classpath refid="compile.classpath"/>
+            <!-- TODO: We should probably enable deprecation warnings -->
+            <!-- <compilerarg value="-Xlint:deprecation"/> -->
+        </javac>
+    </target>
+
+    <!-- WAR target -->
+    <target name="war" depends="compile" description="Package application as WAR file">
+        <mkdir dir="${war.dir}"/>
+
+        <!-- Copy web resources -->
+        <copy todir="${war.dir}">
+            <fileset dir="${web.dir}"/>
+        </copy>
+
+        <!-- Copy compiled classes -->
+        <mkdir dir="${war.dir}/WEB-INF/classes"/>
+        <copy todir="${war.dir}/WEB-INF/classes">
+            <fileset dir="${classes.dir}"/>
+        </copy>
+
+        <!-- Copy libraries to WEB-INF/lib -->
+        <mkdir dir="${war.dir}/WEB-INF/lib"/>
+        <copy todir="${war.dir}/WEB-INF/lib">
+            <fileset dir="${lib.dir}">
+                <include name="*.jar"/>
+                <!-- Don't include servlet API in WAR - container provides it -->
+                <exclude name="servlet-api*.jar"/>
+            </fileset>
+        </copy>
+
+        <!-- Create WAR file -->
+        <war destfile="${war.file}" webxml="${web.dir}/WEB-INF/web.xml">
+            <fileset dir="${war.dir}">
+                <exclude name="WEB-INF/web.xml"/>
+            </fileset>
+        </war>
+
+        <echo message="WAR file created: ${war.file}"/>
+    </target>
+
+    <!-- Run target - uses embedded Jetty or similar (not configured) -->
+    <!-- TODO: This doesn't actually work yet - need to add Jetty runner JAR -->
+    <target name="run" depends="war" description="Run the application (requires Jetty runner in lib/)">
+        <echo message="To run, deploy ${war.file} to a servlet container (Tomcat, Jetty, etc.)"/>
+        <echo message="Or add jetty-runner.jar to lib/ and uncomment the java task below."/>
+        <!--
+        <java jar="${lib.dir}/jetty-runner.jar" fork="true">
+            <arg value="${war.file}"/>
+            <arg value="- -port"/>
+            <arg value="8080"/>
+        </java>
+        -->
+    </target>
+
+    <!-- Convenience target to clean and rebuild -->
+    <target name="rebuild" depends="clean,war" description="Clean and rebuild"/>
+
+</project>
