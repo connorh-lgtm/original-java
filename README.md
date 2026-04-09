@@ -10,7 +10,7 @@ The **incrementally modernized** version of a legacy Java 8 servlet-based blog A
 |-------|-----------|
 | Language | Java 8 |
 | Web Framework | Raw `javax.servlet.http.HttpServlet` |
-| Build System | Apache Ant with manual JAR management |
+| Build System | Gradle 7.6.1 with Maven Central dependencies |
 | Database | SQLite via raw JDBC |
 | JSON | Gson (manual serialization) |
 | Auth | `HttpSession`-based (no JWT) |
@@ -22,9 +22,9 @@ The **incrementally modernized** version of a legacy Java 8 servlet-based blog A
 
 ```
 legacy-realworld-app/
-├── build.xml                          # Ant build file (manual classpath)
-├── lib/                               # Manually managed JAR dependencies
-│   └── README.txt                     #   Download instructions for JARs
+├── build.gradle                       # Gradle build with Maven Central deps
+├── settings.gradle                    # Gradle project settings
+├── gradlew / gradlew.bat             # Gradle wrapper scripts
 ├── web/
 │   └── WEB-INF/
 │       └── web.xml                    # Servlet declarations & mappings
@@ -93,16 +93,13 @@ This codebase intentionally demonstrates the following legacy anti-patterns:
 - **`e.printStackTrace()` for error handling** — No logging framework
 - **Manual resource cleanup** — `try/finally` blocks instead of try-with-resources
 - **Dead code and commented-out blocks** — Abandoned features left in place
-- **Ant build with manual JAR management** — Dependencies downloaded by hand into `lib/`
+- ~~**Ant build with manual JAR management**~~ — Migrated to Gradle with Maven Central dependency resolution
 
 ## Building
 
 ```bash
-# 1. Download required JARs into lib/ (see lib/README.txt)
-# 2. Build with Ant
-ant clean compile war
-
-# The WAR file will be at build/legacy-realworld.war
+./gradlew clean war
+# WAR at build/libs/legacy-realworld.war
 # Deploy to any Servlet 3.1+ container (Tomcat 8+, Jetty 9+, etc.)
 ```
 
@@ -129,7 +126,7 @@ The modern equivalent of this codebase is the **[Spring Boot RealWorld Example A
 
 | Legacy File | Modern Equivalent(s) | Key Improvements |
 |---|---|---|
-| `build.xml` + `lib/` | `build.gradle` | Gradle dependency resolution, no manual JARs |
+| `build.gradle` | `build.gradle` | Both now use Gradle; legacy upgraded from Ant |
 | `web/WEB-INF/web.xml` | `@RestController` + `@RequestMapping` annotations | Annotation-based routing, no XML |
 | `model/Article.java` | `core/article/Article.java` | Lombok `@Getter`, `java.time.Instant`, `@EqualsAndHashCode` |
 | `model/User.java` | `core/user/User.java` | Lombok, password never stored as plain text |

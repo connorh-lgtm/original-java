@@ -30,7 +30,7 @@ import java.util.UUID;
  * manual JSON construction, no separation of concerns.
  * 
  * Mapped to /api/comments/* because the Servlet spec doesn't support
- * mid-path wildcards like /api/articles/*/comments/*.
+ * mid-path wildcards like /api/articles/{slug}/comments/{id}.
  * Actual URL paths:
  *   /api/comments/{slug}       - POST (create), GET (list)
  *   /api/comments/{slug}/{id}  - DELETE

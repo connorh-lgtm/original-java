@@ -64,7 +64,7 @@ public class ArticleServlet extends HttpServlet {
     /**
      * Check if the request is actually for the /comments sub-resource and forward
      * to CommentServlet if so. This is needed because the Servlet spec doesn't
-     * support mid-path wildcards like /api/articles/*/comments/*.
+     * support mid-path wildcards like /api/articles/{slug}/comments/{id}.
      * 
      * TODO: This forwarding hack is fragile. A front-controller pattern or
      * a framework like Spring MVC would handle this cleanly.
