@@ -1,7 +1,8 @@
 package com.legacy.realworld.model;
 
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 /**
@@ -17,10 +18,9 @@ public class Article implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    // TODO: This is not thread-safe! SimpleDateFormat is shared across threads.
-    // See: https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6231579
-    private static final SimpleDateFormat DATE_FORMAT = 
-        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    private static final DateTimeFormatter DATE_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                         .withZone(ZoneOffset.UTC);
 
     private String id;
     private String slug;
@@ -121,23 +121,19 @@ public class Article implements Serializable {
 
     /**
      * Returns a formatted date string.
-     * 
-     * TODO: This is not thread-safe! SimpleDateFormat.format() is not synchronized.
-     * Multiple threads calling this method simultaneously will produce corrupt output.
-     * In the modern version, we use java.time.Instant which is immutable and thread-safe.
      */
     public String getFormattedCreatedAt() {
         if (createdAt == null) {
             return null;
         }
-        return DATE_FORMAT.format(createdAt);
+        return DATE_FORMATTER.format(createdAt.toInstant());
     }
 
     public String getFormattedUpdatedAt() {
         if (updatedAt == null) {
             return null;
         }
-        return DATE_FORMAT.format(updatedAt);
+        return DATE_FORMATTER.format(updatedAt.toInstant());
     }
 
     /**

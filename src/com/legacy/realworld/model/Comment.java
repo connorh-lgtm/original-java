@@ -1,7 +1,8 @@
 package com.legacy.realworld.model;
 
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 /**
@@ -17,9 +18,9 @@ public class Comment implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    // TODO: This is not thread-safe! Same issue as Article.java
-    private static final SimpleDateFormat DATE_FORMAT = 
-        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+    private static final DateTimeFormatter DATE_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                         .withZone(ZoneOffset.UTC);
 
     private String id;
     private String body;
@@ -88,13 +89,12 @@ public class Comment implements Serializable {
 
     /**
      * Returns a formatted date string.
-     * TODO: This is not thread-safe! See Article.java for the same issue.
      */
     public String getFormattedCreatedAt() {
         if (createdAt == null) {
             return null;
         }
-        return DATE_FORMAT.format(createdAt);
+        return DATE_FORMATTER.format(createdAt.toInstant());
     }
 
     @Override
