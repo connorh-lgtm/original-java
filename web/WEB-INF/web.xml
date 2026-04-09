@@ -15,6 +15,9 @@
     <!-- Listeners                                                      -->
     <!-- ============================================================ -->
     <listener>
+        <listener-class>com.legacy.realworld.AppInitializer</listener-class>
+    </listener>
+    <listener>
         <listener-class>com.legacy.realworld.util.AppContextListener</listener-class>
     </listener>
 
