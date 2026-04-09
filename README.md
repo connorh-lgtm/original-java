@@ -1,8 +1,8 @@
 # Legacy RealWorld App
 
-A **legacy Java 8 servlet-based blog API** implementing the [RealWorld](https://github.com/gothinkster/realworld) specification. This project serves as the **"before" state** in a Java modernization demo, showcasing common legacy patterns and anti-patterns found in real-world enterprise codebases.
+The **incrementally modernized** version of a legacy Java 8 servlet-based blog API implementing the [RealWorld](https://github.com/gothinkster/realworld) specification. This branch represents the **"after" state**, showing how the legacy codebase can be improved step by step without a full rewrite.
 
-> **This is intentionally legacy code.** Every anti-pattern in this codebase is deliberate and maps to a modern improvement in the [Spring Boot RealWorld Example App](https://github.com/connorh-lgtm/spring-boot-realworld-example-app).
+> **See the [`main` branch](https://github.com/connorh-lgtm/original-java/tree/main) for the original legacy code.** The [Spring Boot RealWorld Example App](https://github.com/connorh-lgtm/spring-boot-realworld-example-app) represents the full-framework modernization target.
 
 ## Tech Stack
 
