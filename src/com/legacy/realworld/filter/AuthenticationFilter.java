@@ -31,7 +31,7 @@ public class AuthenticationFilter implements Filter {
 
     private boolean requiresAuth(HttpServletRequest request) {
         String method = request.getMethod();
-        String path = request.getRequestURI();
+        String path = request.getRequestURI().substring(request.getContextPath().length());
 
         // Public: POST /api/users (register), POST /api/users/login
         if (path.startsWith("/api/users") && "POST".equals(method)) {
