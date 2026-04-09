@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.legacy.realworld.model.Comment;
-import com.legacy.realworld.util.AuthUtil;
 import com.legacy.realworld.util.DatabaseUtil;
 import com.legacy.realworld.util.JsonUtil;
 
@@ -70,13 +69,7 @@ public class CommentServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        // Auth check copy-paste #3
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
 
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -276,13 +269,7 @@ public class CommentServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        // Auth check #4 - same pattern everywhere
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
 
         Connection conn = null;
         PreparedStatement stmt = null;

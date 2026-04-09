@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.legacy.realworld.model.User;
-import com.legacy.realworld.util.AuthUtil;
 import com.legacy.realworld.util.DatabaseUtil;
 import com.legacy.realworld.util.JsonUtil;
 import com.legacy.realworld.util.PasswordUtil;
@@ -259,12 +258,7 @@ public class UserServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
         Connection conn = null;
         PreparedStatement stmt = null;
         ResultSet rs = null;
