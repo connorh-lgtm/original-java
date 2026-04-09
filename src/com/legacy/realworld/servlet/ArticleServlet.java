@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.legacy.realworld.model.Article;
-import com.legacy.realworld.util.AuthUtil;
 import com.legacy.realworld.util.DatabaseUtil;
 import com.legacy.realworld.util.JsonUtil;
 
@@ -106,14 +105,7 @@ public class ArticleServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        // Manual auth check - repeated in every method
-        // TODO: Should be a filter or interceptor, not copy-pasted code
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
 
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -339,13 +331,7 @@ public class ArticleServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        // Copy-pasted auth check again
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
 
         Connection conn = null;
         PreparedStatement stmt = null;
@@ -478,13 +464,7 @@ public class ArticleServlet extends HttpServlet {
         response.setCharacterEncoding("UTF-8");
         PrintWriter out = response.getWriter();
 
-        // Same auth check copy-pasted yet again
-        if (!AuthUtil.isAuthenticated(request)) {
-            AuthUtil.sendUnauthorized(response);
-            return;
-        }
-
-        String userId = AuthUtil.getCurrentUserId(request);
+        String userId = (String) request.getAttribute("userId");
 
         Connection conn = null;
         PreparedStatement stmt = null;

@@ -19,6 +19,18 @@
     </listener>
 
     <!-- ============================================================ -->
+    <!-- Filters                                                        -->
+    <!-- ============================================================ -->
+    <filter>
+        <filter-name>AuthenticationFilter</filter-name>
+        <filter-class>com.legacy.realworld.filter.AuthenticationFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>AuthenticationFilter</filter-name>
+        <url-pattern>/api/*</url-pattern>
+    </filter-mapping>
+
+    <!-- ============================================================ -->
     <!-- Servlet Declarations                                          -->
     <!-- TODO: Consider using annotation-based configuration (@WebServlet) -->
     <!-- But we've "always done it this way" so let's keep web.xml     -->
@@ -65,11 +77,6 @@
         <url-pattern>/api/comments/*</url-pattern>
     </servlet-mapping>
 
-    <!-- ============================================================ -->
-    <!-- No Filters configured                                         -->
-    <!-- TODO: Should add CORS filter, authentication filter, etc.     -->
-    <!-- Currently auth is checked manually in every servlet method    -->
-    <!-- ============================================================ -->
 
     <!-- Session configuration -->
     <session-config>
