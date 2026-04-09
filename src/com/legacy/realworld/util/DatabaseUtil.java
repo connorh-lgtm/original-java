@@ -61,6 +61,10 @@ public class DatabaseUtil {
     /**
      * Initialize the database schema.
      * 
+     * NOTE: Existing plain-text passwords in the DB need a one-time migration
+     * to re-hash them with BCrypt, or users with old passwords must be forced
+     * to reset their passwords. Until migrated, those accounts cannot log in.
+     * 
      * TODO: No migration framework! Schema changes require manual coordination.
      * The modern version uses Flyway with versioned migration scripts.
      * TODO: CREATE TABLE IF NOT EXISTS masks schema drift issues.

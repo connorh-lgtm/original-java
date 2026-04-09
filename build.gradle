@@ -24,6 +24,7 @@ dependencies {
     implementation 'org.xerial:sqlite-jdbc:3.42.0.0'
     implementation 'com.zaxxer:HikariCP:4.0.3'
     implementation 'org.slf4j:slf4j-simple:1.7.36'
+    implementation 'org.mindrot:jbcrypt:0.4'
 }
 
 war {
