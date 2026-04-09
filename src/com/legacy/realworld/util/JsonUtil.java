@@ -7,7 +7,8 @@ import com.legacy.realworld.model.Article;
 import com.legacy.realworld.model.Comment;
 import com.legacy.realworld.model.User;
 
-import java.text.SimpleDateFormat;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 
 /**
@@ -32,35 +33,16 @@ public class JsonUtil {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    // TODO: THIS IS NOT THREAD-SAFE!
-    // SimpleDateFormat is not synchronized. If two threads call formatDate()
-    // at the same time, the output will be corrupted.
-    // The modern version uses java.time.Instant which is immutable and thread-safe.
-    private static final SimpleDateFormat ISO_DATE_FORMAT = 
-        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-
-    // Dead code: alternate formats that were tried and abandoned
-    // private static final SimpleDateFormat US_DATE_FORMAT = 
-    //     new SimpleDateFormat("MM/dd/yyyy hh:mm a");
-    // private static final SimpleDateFormat EU_DATE_FORMAT = 
-    //     new SimpleDateFormat("dd.MM.yyyy HH:mm");
+    private static final DateTimeFormatter ISO_FORMATTER =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                         .withZone(ZoneOffset.UTC);
 
     /**
      * Format a Date to ISO-8601 string.
-     * 
-     * TODO: THIS IS NOT THREAD-SAFE! Two threads calling this simultaneously
-     * will produce corrupted output because SimpleDateFormat.format() modifies
-     * internal state.
-     * 
-     * Minimal fix: synchronize this method or use ThreadLocal<SimpleDateFormat>
-     * Better fix: use java.time.Instant (Java 8+)
      */
     public static String formatDate(Date date) {
-        if (date == null) {
-            return null;
-        }
-        // TODO: This is not thread-safe!
-        return ISO_DATE_FORMAT.format(date);
+        if (date == null) return null;
+        return ISO_FORMATTER.format(date.toInstant());
     }
 
     /**
