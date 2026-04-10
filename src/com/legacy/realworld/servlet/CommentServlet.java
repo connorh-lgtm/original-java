@@ -3,7 +3,6 @@ package com.legacy.realworld.servlet;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.legacy.realworld.repository.CommentRepository;
 import com.legacy.realworld.service.CommentService;
 
 import javax.servlet.ServletException;
@@ -35,7 +34,7 @@ public class CommentServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         super.init();
-        this.commentService = new CommentService(new CommentRepository());
+        this.commentService = (CommentService) getServletContext().getAttribute("commentService");
         System.out.println("CommentServlet initialized");
     }
 

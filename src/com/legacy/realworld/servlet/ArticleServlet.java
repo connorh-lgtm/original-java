@@ -2,9 +2,7 @@ package com.legacy.realworld.servlet;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.legacy.realworld.repository.ArticleRepository;
 import com.legacy.realworld.service.ArticleService;
-import com.legacy.realworld.util.DatabaseUtil;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
@@ -31,17 +29,7 @@ public class ArticleServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         super.init();
-        this.articleService = new ArticleService(new ArticleRepository());
-
-        // Initialize database schema on first startup
-        // TODO: This should be in a ServletContextListener, not in a servlet init()
-        try {
-            DatabaseUtil.initializeDatabase();
-        } catch (Exception e) {
-            System.err.println("WARNING: Database initialization failed: " + e.getMessage());
-            e.printStackTrace();
-        }
-
+        this.articleService = (ArticleService) getServletContext().getAttribute("articleService");
         System.out.println("ArticleServlet initialized");
     }
 

@@ -3,7 +3,6 @@ package com.legacy.realworld.servlet;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.legacy.realworld.model.User;
-import com.legacy.realworld.repository.UserRepository;
 import com.legacy.realworld.service.UserService;
 
 import javax.servlet.ServletException;
@@ -31,7 +30,7 @@ public class UserServlet extends HttpServlet {
     @Override
     public void init() throws ServletException {
         super.init();
-        this.userService = new UserService(new UserRepository());
+        this.userService = (UserService) getServletContext().getAttribute("userService");
         System.out.println("UserServlet initialized");
     }
 
